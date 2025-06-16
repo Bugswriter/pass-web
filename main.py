@@ -144,14 +144,14 @@ def decrypt_password():
         # --passphrase-fd 0: tells gpg to read the passphrase from file descriptor 0 (stdin)
         # --decrypt: performs the decryption
         process = subprocess.run(
-            ['gpg', '--batch', '--passphrase-fd', '0', '--decrypt', abs_potential_gpg_file_path],
-            input=passphrase.encode('utf-8'), # Pass the passphrase as bytes to stdin
-            capture_output=True, # Capture stdout and stderr
-            # REMOVED: text=True, as input is already bytes
-            check=True # If check is True, CalledProcessError is raised for non-zero exit codes
+            # ADDED '--no-tty' here
+            ['gpg', '--batch', '--no-tty', '--passphrase-fd', '0', '--decrypt', abs_potential_gpg_file_path],
+            input=passphrase.encode('utf-8'),
+            capture_output=True,
+            check=True
         )
-        # Decode the output after decryption as it's captured as bytes now
         decrypted_content = process.stdout.decode('utf-8').strip()
+
         return jsonify({"success": True, "content": decrypted_content})
     except subprocess.CalledProcessError as e:
         # Handle GPG specific errors
