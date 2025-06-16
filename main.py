@@ -218,9 +218,4 @@ if __name__ == '__main__':
         print("Please ensure your password store is cloned to this location and the 'PASSWORD_STORE_DIR' variable in app.py is correctly configured.")
         exit(1) # Exit if the directory is not found
 
-    # Run the Flask development server.
-    # debug=True: Enables debug mode, useful for development (auto-reloads on code changes).
-    # host='0.0.0.0': Makes the server accessible from any IP address on your network.
-    #                 Use '127.0.0.1' or 'localhost' if you only want to access it locally.
-    # port=5000: The port the application will listen on.
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='127.0.0.1', port=5000)
