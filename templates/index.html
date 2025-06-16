@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Password Store Web Interface</title>
+    <!-- Tailwind CSS CDN for minimal styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles to enhance Tailwind's defaults */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+            color: #333; /* Darker text for readability */
+        }
+        .container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 1.5rem;
+            background-color: #ffffff;
+            border-radius: 0.75rem; /* Rounded corners */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+            color: #1f2937; /* Darker header text */
+        }
+        .tree-item {
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            border-radius: 0.5rem;
+            transition: background-color 0.2s ease;
+        }
+        .tree-item:hover {
+            background-color: #e5e7eb; /* Light gray on hover */
+        }
+        .tree-item.folder {
+            font-weight: bold;
+            color: #1e40af; /* Blue for folders */
+        }
+        .tree-item.file {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #4b5563; /* Gray for files */
+        }
+        .tree-item.file button {
+            background-color: #2563eb; /* Blue button */
+            color: white;
+            padding: 0.4rem 0.8rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            border: none;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+        .tree-item.file button:hover {
+            background-color: #1d4ed8; /* Darker blue on hover */
+        }
+        .tree-indent {
+            margin-left: 1.5rem; /* Indentation for nested items */
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent black overlay */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: #ffffff;
+            padding: 2rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 500px;
+            position: relative;
+        }
+        .modal-close-button {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #6b7280;
+        }
+        .decrypted-text {
+            background-color: #e0e7ff; /* Light blue background for password */
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            font-family: 'Courier New', monospace; /* Monospace font for password */
+            word-break: break-all; /* Break long words */
+            white-space: pre-wrap; /* Preserve whitespace and wrap */
+            color: #1a202c; /* Darker text */
+            border: 1px solid #93c5fd; /* Light blue border */
+            overflow-x: auto; /* Allow horizontal scrolling if content is too wide */
+        }
+        .error-message {
+            color: #ef4444; /* Red for errors */
+            background-color: #fee2e2; /* Light red background */
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            border: 1px solid #f87171;
+        }
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #2563eb;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto; /* Center the spinner */
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex justify-center items-center min-h-screen">
+    <div class="container">
+        <h1 class="header text-3xl font-bold">Password Store Web Interface</h1>
+
+        <!-- Search Bar -->
+        <div class="mb-6">
+            <input type="text" id="search-input" placeholder="Search passwords..."
+                   class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
+                   onkeyup="debouncedSearch()">
+        </div>
+
+        <!-- Password Tree Display -->
+        <div id="password-tree" class="bg-gray-50 p-4 rounded-lg border border-gray-200 max-h-96 overflow-y-auto">
+            <p class="text-gray-500 text-center" id="loading-tree">Loading password tree...</p>
+            <!-- Tree will be rendered here by JavaScript -->
+        </div>
+
+        <!-- Decryption Modal -->
+        <div id="decryption-modal" class="modal hidden">
+            <div class="modal-content">
+                <button class="modal-close-button" onclick="closeModal()">&times;</button>
+                <h2 class="text-xl font-semibold mb-4 text-gray-800">Decrypt Password</h2>
+                <p class="text-gray-600 mb-4">Enter your GPG passphrase to decrypt "<span id="decrypt-filename" class="font-medium"></span>".</p>
+
+                <input type="password" id="passphrase-input" placeholder="GPG Passphrase"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 mb-4">
+
+                <button id="decrypt-button"
+                        class="w-full bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+                    <span id="decrypt-button-text">Show Password</span>
+                    <div id="decrypt-spinner" class="loading-spinner hidden mx-auto"></div>
+                </button>
+
+                <div id="decrypted-output" class="hidden">
+                    <p class="text-gray-700 font-semibold mt-4">Decrypted Content:</p>
+                    <pre id="decrypted-content-display" class="decrypted-text"></pre>
+                    <button onclick="copyToClipboard()" class="mt-2 w-full bg-green-600 text-white p-2 rounded-lg hover:bg-green-700 transition duration-200">Copy to Clipboard</button>
+                </div>
+                <div id="decryption-error" class="error-message hidden mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const passwordTreeDiv = document.getElementById('password-tree');
+        const searchInput = document.getElementById('search-input');
+        const decryptionModal = document.getElementById('decryption-modal');
+        const passphraseInput = document.getElementById('passphrase-input');
+        const decryptFilenameSpan = document.getElementById('decrypt-filename');
+        const decryptButton = document.getElementById('decrypt-button');
+        const decryptButtonText = document.getElementById('decrypt-button-text');
+        const decryptSpinner = document.getElementById('decrypt-spinner');
+        const decryptedOutputDiv = document.getElementById('decrypted-output');
+        const decryptedContentDisplay = document.getElementById('decrypted-content-display');
+        const decryptionErrorDiv = document.getElementById('decryption-error');
+
+        let currentFilepathForDecryption = ''; // Stores the relative path of the file to be decrypted
+
+        // --- Utility Functions ---
+
+        /**
+         * Renders the password tree recursively.
+         * @param {object} tree - The tree object from the Flask backend.
+         * @param {HTMLElement} parentElement - The DOM element to append the tree to.
+         * @param {string} currentPath - The current base path for building relative file paths.
+         */
+        function renderTree(tree, parentElement, currentPath = '') {
+            parentElement.innerHTML = ''; // Clear previous content
+
+            if (Object.keys(tree).length === 0) {
+                parentElement.innerHTML = '<p class="text-gray-500 text-center py-4">No entries found.</p>';
+                return;
+            }
+
+            for (const key in tree) {
+                const value = tree[key];
+                const itemDiv = document.createElement('div');
+                itemDiv.classList.add('tree-item', 'py-2', 'px-3', 'rounded-lg');
+
+                if (typeof value === 'object') { // It's a directory (object)
+                    itemDiv.classList.add('folder');
+                    itemDiv.innerHTML = `<span>${key}</span>`; // Display folder name
+
+                    const nestedDiv = document.createElement('div');
+                    nestedDiv.classList.add('tree-indent'); // Add indentation
+                    itemDiv.appendChild(nestedDiv); // Append nested container
+                    parentElement.appendChild(itemDiv); // Append folder item to parent
+
+                    // Recursively render contents of the folder
+                    renderTree(value, nestedDiv, `${currentPath}${key}/`);
+                } else { // It's a file (string representing relative path)
+                    itemDiv.classList.add('file', 'flex', 'items-center', 'justify-between');
+                    itemDiv.innerHTML = `
+                        <span>${key}</span>
+                        <button data-filepath="${value}">Show</button>
+                    `;
+                    // Attach click listener to the 'Show' button
+                    itemDiv.querySelector('button').addEventListener('click', (event) => {
+                        event.stopPropagation(); // Prevent parent div click if it had a listener
+                        currentFilepathForDecryption = event.target.dataset.filepath;
+                        decryptFilenameSpan.textContent = key; // Display filename in modal
+                        showModal();
+                    });
+                    parentElement.appendChild(itemDiv);
+                }
+            }
+        }
+
+        /**
+         * Fetches the password tree from the backend and renders it.
+         * @param {string} query - Optional search query.
+         */
+        async function fetchAndRenderTree(query = '') {
+            passwordTreeDiv.innerHTML = '<p class="text-gray-500 text-center py-4"><div class="loading-spinner mx-auto"></div> Loading...</p>'; // Show loading indicator
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query })
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                if (data.error) {
+                    passwordTreeDiv.innerHTML = `<p class="error-message">${data.error}</p>`;
+                } else {
+                    renderTree(data.tree, passwordTreeDiv);
+                }
+            } catch (error) {
+                console.error('Error fetching password tree:', error);
+                passwordTreeDiv.innerHTML = `<p class="error-message">Failed to load password entries. Check server logs.</p>`;
+            }
+        }
+
+        /**
+         * Shows the decryption modal.
+         */
+        function showModal() {
+            decryptionModal.classList.remove('hidden');
+            // Reset modal state
+            passphraseInput.value = '';
+            decryptedOutputDiv.classList.add('hidden');
+            decryptionErrorDiv.classList.add('hidden');
+            decryptionErrorDiv.textContent = '';
+            decryptButtonText.textContent = 'Show Password';
+            decryptSpinner.classList.add('hidden');
+            passphraseInput.focus(); // Focus on passphrase input for convenience
+        }
+
+        /**
+         * Hides the decryption modal.
+         */
+        function closeModal() {
+            decryptionModal.classList.add('hidden');
+            currentFilepathForDecryption = ''; // Clear stored filepath
+        }
+
+        /**
+         * Handles the decryption request when 'Show Password' button is clicked.
+         */
+        async function handleDecryption() {
+            const passphrase = passphraseInput.value.trim();
+            if (!passphrase) {
+                decryptionErrorDiv.textContent = 'Please enter your GPG passphrase.';
+                decryptionErrorDiv.classList.remove('hidden');
+                return;
+            }
+
+            decryptedOutputDiv.classList.add('hidden'); // Hide previous output
+            decryptionErrorDiv.classList.add('hidden'); // Hide previous error
+            decryptButtonText.textContent = ''; // Hide text
+            decryptSpinner.classList.remove('hidden'); // Show spinner
+            decryptButton.disabled = true; // Disable button during request
+
+            try {
+                const response = await fetch('/api/decrypt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filepath: currentFilepathForDecryption,
+                        passphrase: passphrase
+                    })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    decryptedContentDisplay.textContent = data.content;
+                    decryptedOutputDiv.classList.remove('hidden');
+                } else {
+                    decryptionErrorDiv.textContent = data.error || 'Unknown decryption error.';
+                    decryptionErrorDiv.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error during decryption fetch:', error);
+                decryptionErrorDiv.textContent = 'Network error or server unreachable. Please try again.';
+                decryptionErrorDiv.classList.remove('hidden');
+            } finally {
+                decryptButtonText.textContent = 'Show Password'; // Restore text
+                decryptSpinner.classList.add('hidden'); // Hide spinner
+                decryptButton.disabled = false; // Re-enable button
+                // Clear passphrase input for security after attempt (success or fail)
+                passphraseInput.value = '';
+            }
+        }
+
+        /**
+         * Copies decrypted content to clipboard.
+         */
+        function copyToClipboard() {
+            const textToCopy = decryptedContentDisplay.textContent;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(textToCopy)
+                    .then(() => {
+                        // Optional: Provide visual feedback for copy
+                        const originalText = decryptButtonText.textContent;
+                        decryptButtonText.textContent = 'Copied!';
+                        setTimeout(() => { decryptButtonText.textContent = originalText; }, 1500);
+                        console.log('Content copied to clipboard!');
+                    })
+                    .catch(err => {
+                        console.error('Failed to copy text: ', err);
+                        fallbackCopyTextToClipboard(textToCopy); // Fallback for older browsers/iframes
+                    });
+            } else {
+                fallbackCopyTextToClipboard(textToCopy);
+            }
+        }
+
+        // Fallback for document.execCommand('copy') in environments where navigator.clipboard might not work (e.g., iframes)
+        function fallbackCopyTextToClipboard(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";  // Avoid scrolling to bottom
+            textArea.style.left = "-9999px"; // Hide from view
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                // Optional: Provide visual feedback
+                const originalText = decryptButtonText.textContent;
+                decryptButtonText.textContent = 'Copied!';
+                setTimeout(() => { decryptButtonText.textContent = originalText; }, 1500);
+                console.log('Content copied via execCommand!');
+            } catch (err) {
+                console.error('Fallback: Oops, unable to copy', err);
+                alert('Could not copy to clipboard. Please copy manually: ' + text); // Use browser alert as last resort
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // --- Event Listeners and Initial Load ---
+
+        // Debounce search input to avoid too many requests
+        let searchTimeout;
+        function debouncedSearch() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                fetchAndRenderTree(searchInput.value);
+            }, 300); // Wait for 300ms after last keypress
+        }
+
+        // Add event listener to the decrypt button in the modal
+        decryptButton.addEventListener('click', handleDecryption);
+
+        // Allow pressing Enter in passphrase input to trigger decryption
+        passphraseInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Prevent default form submission behavior
+                handleDecryption();
+            }
+        });
+
+        // Close modal when clicking outside of it
+        decryptionModal.addEventListener('click', (event) => {
+            if (event.target === decryptionModal) {
+                closeModal();
+            }
+        });
+
+        // Close modal when Escape key is pressed
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !decryptionModal.classList.contains('hidden')) {
+                closeModal();
+            }
+        });
+
+        // Initial load: Fetch and render the full password tree
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchAndRenderTree();
+        });
+    </script>
+</body>
+</html>
