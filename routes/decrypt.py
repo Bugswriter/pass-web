@@ -24,11 +24,23 @@ def decrypt_password():
 
     try:
         result = subprocess.run(
-            ["gpg", "--batch", "--no-tty", "--passphrase-fd", "0", "--decrypt", full_path],
+            [
+                "gpg",
+                "--batch",
+                "--yes",
+                "--no-tty",
+                "--pinentry-mode", "loopback",
+                "--passphrase-fd", "0",
+                "--decrypt", full_path
+            ],
             input=passphrase.encode(),
             capture_output=True,
             check=True
         )
         return jsonify({"success": True, "content": result.stdout.decode().strip()})
     except subprocess.CalledProcessError as e:
-        return jsonify({"success": False, "error": e.stderr.decode().strip()}), 500
+        return jsonify({
+            "success": False,
+            "error": e.stderr.decode().strip()
+        }), 401 if "decryption failed" in e.stderr.decode().lower() else 500
+
