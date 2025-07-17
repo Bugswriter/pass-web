@@ -23,6 +23,10 @@ def decrypt_password():
         return jsonify({"error": "Invalid file path."}), 403
 
     try:
+        # Kill any gpg-agent instance to ensure no cached passphrase is used
+        subprocess.run(["gpgconf", "--kill", "gpg-agent"], check=True)
+
+        # Run GPG decryption using provided passphrase (not cache)
         result = subprocess.run(
             [
                 "gpg",
@@ -37,10 +41,18 @@ def decrypt_password():
             capture_output=True,
             check=True
         )
+
         return jsonify({"success": True, "content": result.stdout.decode().strip()})
+
     except subprocess.CalledProcessError as e:
-        return jsonify({
-            "success": False,
-            "error": e.stderr.decode().strip()
-        }), 401 if "decryption failed" in e.stderr.decode().lower() else 500
+        stderr = e.stderr.decode().lower()
+        if "decryption failed" in stderr or "bad passphrase" in stderr:
+            return jsonify({"success": False, "error": "Incorrect passphrase. Please try again."}), 401
+        elif "no secret key" in stderr:
+            return jsonify({"success": False, "error": "Missing secret key for this file. Make sure your GPG key is available on the server."}), 500
+        else:
+            return jsonify({"success": False, "error": "Decryption failed due to an unexpected error."}), 500
+
+    except Exception:
+        return jsonify({"success": False, "error": "Unexpected server error occurred during decryption."}), 500
 
